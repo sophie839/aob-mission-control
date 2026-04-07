@@ -1,41 +1,65 @@
-import { getServerSession } from 'next-auth/next'
+import { getServerSession } from 'next-auth'
 import { google } from 'googleapis'
 import { authOptions } from '../../lib/auth'
-
-export const runtime = 'nodejs'
-
-const getSheetsClient = (accessToken) => {
-  const oauth2Client = new google.auth.OAuth2()
-  oauth2Client.setCredentials({
-    access_token: accessToken,
-  })
-  return google.sheets({ version: 'v4', auth: oauth2Client })
-}
 
 const SHEET_ID = process.env.GOOGLE_SHEETS_ID
 const RANGE = 'Sheet1!A1:Q1000'
 
-const stages = [
-  { name: '1-New Prospect', displayName: 'Cold Prospect', id: 'cold', color: '--stage-cold' },
-  { name: '2-Outreach Sent', displayName: 'Outreach Sent', id: 'followup', color: '--stage-sent' },
-  { name: '3-Engaged', displayName: 'Engaged', id: 'engaged', color: '--stage-engaged' },
-  { name: '4-Sample Sent', displayName: 'Sample Sent', id: 'sample', color: '--stage-sample' },
-  { name: '5-Decision Pending', displayName: 'Decision Pending', id: 'decision', color: '--stage-decision' },
-  { name: '6-Won', displayName: 'Won', id: 'won', color: '--stage-won' },
-]
+// Column positions (0-indexed)
+const COL = {
+  company: 0,
+  vertical: 1,
+  contact: 2,
+  title: 3,
+  email: 4,
+  phone: 5,
+  distributor: 6,
+  broker: 7,
+  stage: 8,
+  sampleSent: 9,
+  sampleFollowUp: 10,
+  lastContact: 11,
+  firstOrder: 12,
+  lastOrder: 13,
+  volume: 14,
+  revenue: 15,
+  notes: 16,
+}
 
-export async function GET(request) {
+// Map sheet stages to the 4 columns
+const COLUMN_MAP = {
+  PROSPECTING: ['1-New Prospect', '2-Outreach Sent'],
+  DEVELOPING: ['3-Engaged', '4-Sample Sent', '5-Decision Pending'],
+  CLOSED: ['6-Won'],
+}
+
+// Sub-stage display names for badges
+const STAGE_LABELS = {
+  '1-New Prospect': 'New',
+  '2-Outreach Sent': 'Outreach Sent',
+  '3-Engaged': 'Engaged',
+  '4-Sample Sent': 'Sample Sent',
+  '5-Decision Pending': 'Decision',
+  '6-Won': 'Won',
+}
+
+function getColumn(stageValue) {
+  for (const [col, stages] of Object.entries(COLUMN_MAP)) {
+    if (stages.includes(stageValue)) return col
+  }
+  return null // Lost or unknown
+}
+
+export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-
     if (!session?.accessToken) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const sheets = getSheetsClient(session.accessToken)
+    const oauth2Client = new google.auth.OAuth2()
+    oauth2Client.setCredentials({ access_token: session.accessToken })
+    const sheets = google.sheets({ version: 'v4', auth: oauth2Client })
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
@@ -43,112 +67,54 @@ export async function GET(request) {
     })
 
     const rows = response.data.values || []
-    if (rows.length === 0) {
-      return new Response(
-        JSON.stringify(
-          stages.map((stage) => ({
-            name: stage.displayName,
-            id: stage.id,
-            color: stage.color,
-            cards: [],
-          }))
-        ),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      )
+    if (rows.length < 2) {
+      return Response.json({
+        PROSPECTING: [],
+        DEVELOPING: [],
+        CLOSED: [],
+      })
     }
 
-    const COL = {
-      company: 0,
-      vertical: 1,
-      contact: 2,
-      title: 3,
-      email: 4,
-      phone: 5,
-      distributor: 6,
-      broker: 7,
-      stage: 8,
-      sampleSent: 9,
-      sampleFollowUp: 10,
-      lastContact: 11,
-      firstOrder: 12,
-      lastOrder: 13,
-      volume: 14,
-      revenue: 15,
-      notes: 16,
-    }
+    // Skip header row
+    const dataRows = rows.slice(1)
+    const columns = { PROSPECTING: [], DEVELOPING: [], CLOSED: [] }
 
-    const pipelineData = {}
-    stages.forEach((stage) => {
-      pipelineData[stage.name] = []
-    })
+    dataRows.forEach((row, index) => {
+      const stage = (row[COL.stage] || '').trim()
+      const column = getColumn(stage)
+      if (!column) return // Skip Lost or unknown stages
 
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i]
-      if (!row[COL.company]) continue
+      const company = (row[COL.company] || '').trim()
+      if (!company) return // Skip empty rows
 
-      const rawStage = (row[COL.stage] || '').trim()
-
-      let matchedStage = rawStage
-      if (!pipelineData[rawStage]) {
-        const stageNum = rawStage.match(/^(\d)/)
-        if (stageNum) {
-          const found = stages.find(s => s.name.startsWith(stageNum[1] + '-'))
-          if (found) matchedStage = found.name
-        }
-        if (!pipelineData[matchedStage]) {
-          matchedStage = stages[0].name
-        }
-      }
-
-      const card = {
-        id: `${i}`,
-        company: row[COL.company] || '',
-        vertical: row[COL.vertical] || '',
-        contact: row[COL.contact] || '',
-        title: row[COL.title] || '',
-        email: row[COL.email] || '',
-        phone: row[COL.phone] || '',
-        distributor: row[COL.distributor] || '',
-        broker: row[COL.broker] || '',
-        lastContact: row[COL.lastContact] || '',
-        volume: row[COL.volume] || '',
-        revenue: row[COL.revenue] || '',
-        notes: row[COL.notes] || '',
-        status: '',
+      columns[column].push({
+        id: String(index + 2), // Sheet row number (1-indexed + header)
+        company,
+        vertical: (row[COL.vertical] || '').trim(),
+        contact: (row[COL.contact] || '').trim(),
+        title: (row[COL.title] || '').trim(),
+        email: (row[COL.email] || '').trim(),
+        phone: (row[COL.phone] || '').trim(),
+        distributor: (row[COL.distributor] || '').trim(),
+        broker: (row[COL.broker] || '').trim(),
+        stage: stage,
+        stageLabel: STAGE_LABELS[stage] || stage,
+        lastContact: (row[COL.lastContact] || '').trim(),
+        volume: (row[COL.volume] || '').trim(),
+        revenue: (row[COL.revenue] || '').trim(),
+        notes: (row[COL.notes] || '').trim(),
         hasDraft: false,
         draftId: null,
-      }
-
-      pipelineData[matchedStage].push(card)
-    }
-
-    const result = stages.map((stage) => ({
-      name: stage.displayName,
-      id: stage.id,
-      color: stage.color,
-      cards: pipelineData[stage.name] || [],
-    }))
-
-    return new Response(JSON.stringify(result), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      })
     })
+
+    return Response.json(columns)
   } catch (error) {
     console.error('Pipeline API error:', error)
-
-    const fallbackStages = stages.map((stage) => ({
-      name: stage.displayName,
-      id: stage.id,
-      color: stage.color,
-      cards: [],
-    }))
-
-    return new Response(JSON.stringify(fallbackStages), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
+    return Response.json({
+      PROSPECTING: [],
+      DEVELOPING: [],
+      CLOSED: [],
     })
   }
 }

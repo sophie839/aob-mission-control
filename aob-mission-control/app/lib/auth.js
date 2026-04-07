@@ -1,8 +1,10 @@
 import GoogleProvider from 'next-auth/providers/google'
 
-const refreshAccessToken = async (token) => {
+async function refreshAccessToken(token) {
   try {
-    const response = await fetch('https://oauth2.googleapis.com/token', {
+    const url = 'https://oauth2.googleapis.com/token'
+    const response = await fetch(url, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         client_id: process.env.GOOGLE_CLIENT_ID,
@@ -10,27 +12,18 @@ const refreshAccessToken = async (token) => {
         grant_type: 'refresh_token',
         refresh_token: token.refreshToken,
       }),
-      method: 'POST',
     })
-
-    const refreshedTokens = await response.json()
-
-    if (!response.ok) {
-      throw refreshedTokens
-    }
-
+    const refreshed = await response.json()
+    if (!response.ok) throw refreshed
     return {
       ...token,
-      accessToken: refreshedTokens.access_token,
-      accessTokenExpires: Date.now() + refreshedTokens.expires_in * 1000,
-      refreshToken: refreshedTokens.refresh_token ?? token.refreshToken,
+      accessToken: refreshed.access_token,
+      accessTokenExpires: Date.now() + refreshed.expires_in * 1000,
+      refreshToken: refreshed.refresh_token ?? token.refreshToken,
     }
   } catch (error) {
-    console.error('Token refresh error:', error)
-    return {
-      ...token,
-      error: 'RefreshAccessTokenError',
-    }
+    console.error('Error refreshing access token', error)
+    return { ...token, error: 'RefreshAccessTokenError' }
   }
 }
 
@@ -57,9 +50,6 @@ export const authOptions = {
       },
     }),
   ],
-  pages: {
-    signIn: '/',
-  },
   callbacks: {
     async jwt({ token, account }) {
       if (account) {
@@ -67,11 +57,7 @@ export const authOptions = {
         token.refreshToken = account.refresh_token
         token.accessTokenExpires = account.expires_at * 1000
       }
-
-      if (Date.now() < (token.accessTokenExpires || 0)) {
-        return token
-      }
-
+      if (Date.now() < (token.accessTokenExpires || 0)) return token
       return refreshAccessToken(token)
     },
     async session({ session, token }) {

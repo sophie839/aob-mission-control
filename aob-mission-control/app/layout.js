@@ -2,8 +2,8 @@ import './globals.css'
 import Providers from './providers'
 
 export const metadata = {
-  title: 'Mission Control - The Art of Broth',
-  description: 'Gmail-connected Kanban pipeline dashboard for The Art of Broth',
+  title: 'Mission Control — The Art of Broth',
+  description: 'B2B pipeline command center',
 }
 
 export default function RootLayout({ children }) {

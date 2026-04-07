@@ -1,119 +1,91 @@
-import { getServerSession } from 'next-auth/next'
+import { getServerSession } from 'next-auth'
 import { google } from 'googleapis'
 import { authOptions } from '../../lib/auth'
+import {
+  isImportantEmail,
+  calculateUrgency,
+  extractSenderName,
+  extractEmail,
+} from '../../lib/emailFilters'
+import { getHeaderValue, truncate } from '../../lib/gmailHelpers'
 
-export const runtime = 'nodejs'
-
-const getGmailClient = (accessToken) => {
-  const oauth2Client = new google.auth.OAuth2()
-  oauth2Client.setCredentials({
-    access_token: accessToken,
-  })
-  return google.gmail({ version: 'v1', auth: oauth2Client })
-}
-
-const extractTextFromMessage = (message) => {
-  if (!message.payload) return ''
-
-  let text = ''
-  const parts = message.payload.parts || []
-
-  if (message.payload.body?.data) {
-    text = Buffer.from(message.payload.body.data, 'base64').toString('utf-8')
-  }
-
-  for (const part of parts) {
-    if (part.mimeType === 'text/plain' || part.mimeType === 'text/html') {
-      if (part.body?.data) {
-        text += Buffer.from(part.body.data, 'base64').toString('utf-8')
-      }
-    }
-  }
-
-  return text.trim().substring(0, 200)
-}
-
-const getHeaderValue = (headers, name) => {
-  const header = headers.find((h) => h.name.toLowerCase() === name.toLowerCase())
-  return header?.value || ''
-}
-
-export async function GET(request) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-
     if (!session?.accessToken) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const gmail = getGmailClient(session.accessToken)
+    const oauth2Client = new google.auth.OAuth2()
+    oauth2Client.setCredentials({ access_token: session.accessToken })
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
-    const query = 'is:unread in:inbox newer_than:7d'
-    const messagesRes = await gmail.users.messages.list({
+    // Fetch recent unread + important emails
+    const list = await gmail.users.messages.list({
       userId: 'me',
-      q: query,
-      maxResults: 20,
+      maxResults: 50,
+      q: 'in:inbox newer_than:7d -category:promotions -category:social -category:updates',
     })
 
-    const messages = messagesRes.data.messages || []
-    const inboxItems = []
+    const messages = list.data.messages || []
+    const items = []
 
-    for (const msg of messages.slice(0, 8)) {
-      const fullMessage = await gmail.users.messages.get({
-        userId: 'me',
+    // Fetch message details in parallel (batch of 20 max)
+    const batch = messages.slice(0, 30)
+    const details = await Promise.all(
+      batch.map((m) =>
+        gmail.users.messages
+          .get({
+            userId: 'me',
+            id: m.id,
+            format: 'metadata',
+            metadataHeaders: ['From', 'Subject', 'Date'],
+          })
+          .catch(() => null)
+      )
+    )
+
+    for (const detail of details) {
+      if (!detail?.data) continue
+      const msg = detail.data
+      const from = getHeaderValue(msg.payload?.headers, 'From')
+      const subject = getHeaderValue(msg.payload?.headers, 'Subject')
+      const date = getHeaderValue(msg.payload?.headers, 'Date')
+
+      if (!isImportantEmail(from, subject)) continue
+
+      const isUnread = (msg.labelIds || []).includes('UNREAD')
+
+      items.push({
         id: msg.id,
-        format: 'full',
-      })
-
-      const message = fullMessage.data
-      const headers = message.payload.headers || []
-
-      inboxItems.push({
-        id: msg.id,
-        from: getHeaderValue(headers, 'From'),
-        subject: getHeaderValue(headers, 'Subject'),
-        preview: extractTextFromMessage(message),
-        timestamp: message.internalDate,
+        threadId: msg.threadId,
+        from: extractSenderName(from),
+        fromEmail: extractEmail(from),
+        fromFull: from,
+        subject: subject || '(no subject)',
+        preview: truncate(msg.snippet, 140),
+        date: date,
+        urgency: calculateUrgency(from, subject, date),
+        isUnread,
+        hasDraft: false,
+        draftId: null,
+        draftSubject: null,
+        draftPreview: null,
       })
     }
 
-    return new Response(JSON.stringify(inboxItems), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
+    // Sort: unread first, then by urgency, then by date
+    const urgencyOrder = { HIGH: 0, MEDIUM: 1, LOW: 2 }
+    items.sort((a, b) => {
+      if (a.isUnread !== b.isUnread) return a.isUnread ? -1 : 1
+      if (a.urgency !== b.urgency)
+        return urgencyOrder[a.urgency] - urgencyOrder[b.urgency]
+      return new Date(b.date) - new Date(a.date)
     })
+
+    return Response.json(items.slice(0, 20))
   } catch (error) {
     console.error('Inbox API error:', error)
-
-    const defaultItems = [
-      {
-        id: '1',
-        from: 'Daniel Zakri',
-        subject: 'Healthcare strategy discussion',
-        preview: 'REPLY NEEDED',
-        timestamp: Date.now().toString(),
-      },
-      {
-        id: '2',
-        from: 'TikTok Ads',
-        subject: 'Ad budget running out',
-        preview: 'Your monthly budget is depleting fast',
-        timestamp: Date.now().toString(),
-      },
-      {
-        id: '3',
-        from: 'Eve Albert',
-        subject: 'Latest deck request',
-        preview: 'Can you send over the latest presentation?',
-        timestamp: Date.now().toString(),
-      },
-    ]
-
-    return new Response(JSON.stringify(defaultItems), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return Response.json({ error: 'Failed to fetch inbox' }, { status: 500 })
   }
 }
