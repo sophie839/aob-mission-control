@@ -68,6 +68,7 @@ export default function Dashboard() {
               draftId: matchedDraft.id,
               draftSubject: matchedDraft.subject,
               draftPreview: matchedDraft.preview,
+              draftBody: matchedDraft.body,
             }
           }
           return card
