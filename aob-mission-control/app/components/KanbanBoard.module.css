@@ -1,0 +1,41 @@
+.board {
+  display: grid;
+  grid-auto-columns: 340px;
+  gap: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 20px;
+  user-select: none;
+  height: 100%;
+  scroll-behavior: smooth;
+}
+
+.board::-webkit-scrollbar {
+  height: 8px;
+}
+
+.board::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.board::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.board::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+@media (max-width: 1200px) {
+  .board {
+    grid-auto-columns: 300px;
+  }
+}
+
+@media (max-width: 768px) {
+  .board {
+    grid-auto-columns: 280px;
+    gap: 12px;
+  }
+}

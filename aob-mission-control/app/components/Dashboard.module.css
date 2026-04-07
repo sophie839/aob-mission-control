@@ -1,0 +1,127 @@
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--bg);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--bg);
+}
+
+.headerLeft h1 {
+  font-size: 28px;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 4px 0 0 0;
+}
+
+.headerRight {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.refreshButton {
+  padding: 8px 12px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border-radius: var(--radius);
+  font-size: 18px;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.refreshButton:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.signOutButton {
+  padding: 8px 16px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--radius);
+  transition: all 0.2s ease;
+}
+
+.signOutButton:hover {
+  background-color: var(--text-secondary);
+  color: white;
+}
+
+.main {
+  flex: 1;
+  overflow: auto;
+  padding: 20px 32px;
+}
+
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 20px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error {
+  padding: 16px;
+  background-color: #fff0f0;
+  border-left: 4px solid #ff3b30;
+  border-radius: var(--radius);
+  color: #d70015;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .header {
+    padding: 16px 20px;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .headerRight {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .main {
+    padding: 16px 20px;
+  }
+
+  .headerLeft h1 {
+    font-size: 24px;
+  }
+}
