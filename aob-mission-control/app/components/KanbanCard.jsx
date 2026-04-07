@@ -170,11 +170,8 @@ export default function KanbanCard({ card, type, onSend, onArchive }) {
           {card.hasDraft && (
             <div className={styles.draftSection}>
               <div className={styles.draftLabel}>Draft Email</div>
-              <p className={styles.draftPreview}>
-                To: {card.email}
-                {'\n'}
-                {card.draftPreview}
-              </p>
+              <p className={styles.draftTo}>To: {card.email}</p>
+              <p className={styles.draftFull}>{card.draftBody || card.draftPreview}</p>
             </div>
           )}
 
@@ -185,7 +182,7 @@ export default function KanbanCard({ card, type, onSend, onArchive }) {
                 onClick={handleSend}
                 disabled={sending}
               >
-                {sending ? 'Sending...' : 'Send Draft'}
+                {sending ? 'Sending...' : 'Approve & Send'}
               </button>
             )}
 
