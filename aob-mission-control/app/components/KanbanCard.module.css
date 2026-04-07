@@ -210,6 +210,21 @@
   overflow-y: auto;
 }
 
+.draftTo {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.draftFull {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 /* Draft badge (collapsed) */
 .draftBadge {
   margin-top: var(--space-sm);
